@@ -1,0 +1,44 @@
+package one.digitalinnovation.beerstock.controller;
+
+import io.restassured.response.Response;
+import lombok.extern.slf4j.Slf4j;
+
+import one.digitalinnovation.beerstock.modal.BeerRequest;
+import org.junit.jupiter.api.Test;
+
+import static io.restassured.RestAssured.given;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+@Slf4j
+public class BeerTestController {
+
+    private static final String BASE_URL = "http://localhost:8080";
+    private static final String BEERS_PATH = "/api/v1/beers";
+    private Response response;
+
+    @Test
+    public void createBeer() {
+
+        BeerRequest beerToCreate = BeerRequest.builder()
+                .name("Brahma")
+                .brand("Ambev")
+                .max(50)
+                .quantity(10)
+                .type("LAGER")
+                .build();
+
+        log.info("Body: " + beerToCreate.toString());
+        response = given()
+                .contentType("application/json")
+                .body(beerToCreate)
+                .when()
+                .post(BASE_URL + BEERS_PATH)
+                .then()
+                .extract()
+                .response();
+
+        log.info("Resultado do Teste - Status: {}, Corpo: {}", response.statusCode(), response.asString());
+
+        assertEquals(201, response.statusCode());
+    }
+}
