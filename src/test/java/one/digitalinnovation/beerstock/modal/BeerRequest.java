@@ -11,10 +11,18 @@ import lombok.NoArgsConstructor;
 @Builder
 public class BeerRequest {
 
-    private String name;
-    private String brand;
-    private int max;
-    private int quantity;
-    private String type;
+    @Builder.Default
+    private String name = "Skol"; // Valor padrão
 
+    @Builder.Default
+    private String brand = "Ambev"; // Valor padrão
+
+    @Builder.Default
+    private int max = 50; // Valor padrão
+
+    @Builder.Default
+    private int quantity = 10; // Valor padrão
+
+    @Builder.Default
+    private String type = "LAGER"; // Valor padrão
 }
