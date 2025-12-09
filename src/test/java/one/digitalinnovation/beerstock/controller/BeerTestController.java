@@ -5,18 +5,13 @@ import lombok.extern.slf4j.Slf4j;
 import one.digitalinnovation.beerstock.manager.BeerManager;
 import one.digitalinnovation.beerstock.modal.BeerRequest;
 import one.digitalinnovation.beerstock.modal.QuantityRequest;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.MethodOrderer;
-import org.junit.jupiter.api.Order;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.TestMethodOrder;
+import org.junit.jupiter.api.*;
 
-import static io.restassured.RestAssured.given;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.not;
-import static org.hamcrest.Matchers.empty;
+
+import static io.restassured.RestAssured.*;
+import static org.hamcrest.MatcherAssert.*;
+import static org.hamcrest.Matchers.*;
+
 
 @Slf4j
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
