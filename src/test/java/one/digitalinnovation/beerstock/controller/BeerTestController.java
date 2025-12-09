@@ -2,8 +2,10 @@ package one.digitalinnovation.beerstock.controller;
 
 import io.restassured.response.Response;
 import lombok.extern.slf4j.Slf4j;
+import one.digitalinnovation.beerstock.manager.BeerManager;
 import one.digitalinnovation.beerstock.modal.BeerRequest;
 import one.digitalinnovation.beerstock.modal.QuantityRequest;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
@@ -13,190 +15,216 @@ import org.junit.jupiter.api.TestMethodOrder;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.empty;
-import static org.hamcrest.Matchers.is;
 
 @Slf4j
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class BeerTestController {
 
+    private Response response;
     private static final String BASE_URL = "http://localhost:8080";
     private static final String BEERS_PATH = "/api/v1/beers";
 
-    private Response response;
-    private String createdBeerName;
-    private Long createdBeerId;
-    private int currentQuantity;
-
-    // --- Testes de Criação ---
-    @Test
-    @Order(1)
-    void whenPOSTIsCalledThenABeerIsCreated() {
-        log.info("ORDEM 1: Testando a criação de uma nova cerveja.");
-        BeerRequest defaultBeer = BeerRequest.builder().build();
-
-        response = given()
-                .contentType("application/json")
-                .body(defaultBeer)
-                .when().post(BEERS_PATH)
-                .then().extract().response();
-
-        assertThat(response.statusCode(), equalTo(201));
-        assertThat(response.jsonPath().getString("name"), equalTo("Skol"));
-
-        this.createdBeerName = response.jsonPath().getString("name");
-        this.createdBeerId = response.jsonPath().getLong("id");
-        this.currentQuantity = response.jsonPath().getInt("quantity");
-
-        log.info("ORDEM 1: Sucesso - Status: {}, ID: {}", response.statusCode(), this.createdBeerId);
+    public void BeerController() {
+        this.response = null;
     }
 
     @Test
-    @Order(2)
-    void whenPOSTIsCalledWithoutRequiredFieldThenAnErrorIsReturned() {
-        log.info("ORDEM 2: Testando a criação com campo obrigatório faltando.");
+    @Order(1)
+    void beerIsCreated() {
+        log.info("ORDEM 1: Testando a criação de uma nova cerveja.");
         BeerRequest beerToCreate = BeerRequest.builder()
                 .name("Skol")
+                .brand("Ambev")
+                .max(50)
                 .quantity(10)
                 .type("LAGER")
-                .build(); // 'brand' está faltando
+                .build();
 
         response = given()
                 .contentType("application/json")
                 .body(beerToCreate)
                 .when().post(BEERS_PATH)
-                .then().extract().response();
+                .then().statusCode(201).extract().response();
 
-        assertThat(response.statusCode(), equalTo(400));
-        log.info("ORDEM 2: Sucesso - Status: {}", response.statusCode());
+        BeerManager.setTestId(response.jsonPath().getLong("id"));
+        BeerManager.setTestName(response.jsonPath().getString("name"));
+        BeerManager.setCurrentQuantity(response.jsonPath().getInt("quantity"));
+
+        log.info("ORDEM 1: Sucesso - Status: {}, ID: {}", response.statusCode(), BeerManager.getTestId());
     }
 
-    // --- Testes de Leitura ---
+    @Test
+    @Order(2)
+    void AlreadyRegisteredBeer() {
+        log.info("ORDEM 2: Testando a criação de cerveja duplicada.");
+        BeerRequest beerToCreate = BeerRequest.builder()
+                .name(BeerManager.getTestName())
+                .build();
+
+        response = given()
+                .contentType("application/json")
+                .body(beerToCreate)
+                .when()
+                .post(BEERS_PATH)
+                .then()
+                .statusCode(400)
+                .body("message", equalTo("Beer with name " + BeerManager.getTestName() + " already registered in the system."))
+                .extract().response();
+
+        log.info("ORDEM 2: Sucesso - Status: {}, Corpo: {}", response.statusCode(), response.asPrettyString());
+    }
+
     @Test
     @Order(3)
-    void whenGETListWithBeersIsCalledThenOkStatusIsReturned() {
-        log.info("ORDEM 3: Testando a listagem de cervejas.");
+    void beerIsCalledWithValidName() {
+        log.info("ORDEM 3: Testando a busca de cerveja por nome válido.");
         response = given()
                 .contentType("application/json")
-                .when().get(BEERS_PATH)
-                .then().extract().response();
+                .when()
+                .get(BEERS_PATH + "/" + BeerManager.getTestName())
+                .then()
+                .statusCode(200)
+                .body("name", equalTo(BeerManager.getTestName()))
+                .extract().response();
 
-        assertThat(response.statusCode(), equalTo(200));
-        log.info("ORDEM 3: Sucesso - Status: {}", response.statusCode());
+        log.info("ORDEM 3: Sucesso - Status: {}, Corpo: {}", response.statusCode(), response.asPrettyString());
     }
 
-    // --- Testes de Incremento ---
     @Test
     @Order(4)
-    void whenPATCHIsCalledToIncrementThenOKstatusIsReturned() {
-        log.info("ORDEM 4: Testando o incremento de estoque.");
-        int quantityToIncrement = 15;
-        QuantityRequest quantityRequest = QuantityRequest.builder().quantity(quantityToIncrement).build();
-        int expectedQuantity = this.currentQuantity + quantityToIncrement;
-
+    void returnAListOfBeers() {
+        log.info("ORDEM 4: Testando a listagem de cervejas.");
         response = given()
                 .contentType("application/json")
-                .body(quantityRequest)
-                .when().patch(BEERS_PATH + "/" + this.createdBeerId + "/increment")
-                .then().extract().response();
+                .when()
+                .get(BEERS_PATH)
+                .then()
+                .statusCode(200)
+                .body("$", not(empty()))
+                .extract().response();
 
-        assertThat(response.statusCode(), equalTo(200));
-        assertThat(response.jsonPath().getInt("quantity"), equalTo(expectedQuantity));
-        this.currentQuantity = expectedQuantity; // Atualiza a quantidade para o próximo teste
-        log.info("ORDEM 4: Sucesso - Status: {}, Nova Quantidade: {}", response.statusCode(), this.currentQuantity);
+        log.info("ORDEM 4: Sucesso - Status: {}", response.statusCode());
     }
 
     @Test
     @Order(5)
-    void whenPATCHIsCalledToIncrementGreatherThanMaxThenBadRequestStatusIsReturned() {
-        log.info("ORDEM 5: Testando o incremento de estoque além do máximo.");
-        QuantityRequest quantityRequest = QuantityRequest.builder().quantity(30).build(); // 25 + 30 = 55 > 50
+    void incrementIsCalled() {
+        log.info("ORDEM 5: Testando o incremento de estoque com sucesso.");
+        int quantityToIncrement = 15;
+        QuantityRequest quantityRequest = QuantityRequest.builder()
+                .quantity(quantityToIncrement)
+                .build();
+
+        int expectedQuantity = Integer.parseInt(BeerManager.getCurrentQuantity()) + quantityToIncrement;
 
         response = given()
                 .contentType("application/json")
                 .body(quantityRequest)
-                .when().patch(BEERS_PATH + "/" + this.createdBeerId + "/increment")
-                .then().extract().response();
+                .when()
+                .patch(BEERS_PATH + "/" + BeerManager.getTestId() + "/increment")
+                .then()
+                .statusCode(200)
+                .body("quantity", equalTo(expectedQuantity))
+                .extract().response();
 
-        assertThat(response.statusCode(), equalTo(400));
-        log.info("ORDEM 5: Sucesso - Status: {}", response.statusCode());
+        BeerManager.setCurrentQuantity(response.jsonPath().getInt("quantity"));
+        log.info("ORDEM 5: Sucesso - Status: {}, Nova quantidade: {}", response.statusCode(), BeerManager.getCurrentQuantity());
     }
 
-    // --- Testes de Decremento ---
     @Test
     @Order(6)
-    void whenPATCHIsCalledToDecrementThenOKstatusIsReturned() {
-        log.info("ORDEM 6: Testando o decremento de estoque.");
-        int quantityToDecrement = 20;
-        QuantityRequest quantityRequest = QuantityRequest.builder().quantity(quantityToDecrement).build();
-        int expectedQuantity = this.currentQuantity - quantityToDecrement;
+    void incrementIsGreatherThanMax() {
+        log.info("ORDEM 6: Testando o incremento de estoque além do máximo.");
+        int quantityToIncrement = 30;
+        QuantityRequest quantityRequest = QuantityRequest.builder()
+                .quantity(quantityToIncrement)
+                .build();
 
         response = given()
                 .contentType("application/json")
                 .body(quantityRequest)
-                .when().patch(BEERS_PATH + "/" + this.createdBeerId + "/decrement")
-                .then().extract().response();
+                .when()
+                .patch(BEERS_PATH + "/" + BeerManager.getTestId() + "/increment")
+                .then()
+                .statusCode(400)
+                .extract().response();
 
-        assertThat(response.statusCode(), equalTo(200));
-        assertThat(response.jsonPath().getInt("quantity"), equalTo(expectedQuantity));
-        this.currentQuantity = expectedQuantity; // Atualiza a quantidade
-        log.info("ORDEM 6: Sucesso - Status: {}, Nova Quantidade: {}", response.statusCode(), this.currentQuantity);
+        log.info("ORDEM 6: Sucesso - Status: {}, Corpo: {}", response.statusCode(), response.asPrettyString());
     }
 
     @Test
     @Order(7)
-    void whenPATCHIsCalledToDecrementLowerThanZeroThenBadRequestStatusIsReturned() {
-        log.info("ORDEM 7: Testando o decremento de estoque para valor negativo.");
-        QuantityRequest quantityRequest = QuantityRequest.builder().quantity(10).build(); // 5 - 10 = -5
+    void decrementIsCalled() {
+        log.info("ORDEM 7: Testando o decremento de estoque com sucesso (ESPERADO FALHAR).");
+        int quantityToDecrement = 5;
+        QuantityRequest quantityRequest = QuantityRequest.builder()
+                .quantity(quantityToDecrement)
+                .build();
+
+        int expectedQuantity = Integer.parseInt(BeerManager.getCurrentQuantity()) - quantityToDecrement;
 
         response = given()
                 .contentType("application/json")
                 .body(quantityRequest)
-                .when().patch(BEERS_PATH + "/" + this.createdBeerId + "/decrement")
-                .then().extract().response();
+                .when()
+                .patch(BEERS_PATH + "/" + BeerManager.getTestId() + "/decrement")
+                .then()
+                .statusCode(200)
+                .body("quantity", equalTo(expectedQuantity))
+                .extract().response();
 
-        assertThat(response.statusCode(), equalTo(400));
-        log.info("ORDEM 7: Sucesso - Status: {}", response.statusCode());
+        BeerManager.setCurrentQuantity(response.jsonPath().getInt("quantity"));
+        log.info("ORDEM 7: Sucesso - Status: {}, Nova quantidade: {}", response.statusCode(), BeerManager.getCurrentQuantity());
     }
 
-    // --- Testes de Deleção ---
     @Test
     @Order(8)
-    void whenDELETEIsCalledWithValidIdThenNoContentStatusIsReturned() {
-        log.info("ORDEM 8: Testando a deleção de uma cerveja.");
+    void decrementIsLowerThanZero() {
+        log.info("ORDEM 8: Testando o decremento de estoque para valor negativo (ESPERADO FALHAR).");
+        int currentQuantity = Integer.parseInt(BeerManager.getCurrentQuantity());
+        int quantityToDecrement = currentQuantity + 1;
+        QuantityRequest quantityRequest = QuantityRequest.builder()
+                .quantity(quantityToDecrement)
+                .build();
+
         response = given()
                 .contentType("application/json")
-                .when().delete(BEERS_PATH + "/" + this.createdBeerId)
-                .then().extract().response();
+                .body(quantityRequest)
+                .when()
+                .patch(BEERS_PATH + "/" + BeerManager.getTestId() + "/decrement")
+                .then()
+                .statusCode(400)
+                .extract().response();
 
-        assertThat(response.statusCode(), equalTo(204));
-        log.info("ORDEM 8: Sucesso - Status: {}", response.statusCode());
+        log.info("ORDEM 8: Sucesso - Status: {}, Corpo: {}", response.statusCode(), response.asPrettyString());
     }
 
     @Test
     @Order(9)
-    void whenDELETEIsCalledWithInvalidIdThenNotFoundStatusIsReturned() {
-        log.info("ORDEM 9: Testando a deleção com ID inválido.");
+    void deleteIsCalledWithValidId() {
+        log.info("ORDEM 9: Testando a deleção de cerveja com ID válido.");
+
         response = given()
                 .contentType("application/json")
-                .when().delete(BEERS_PATH + "/9999")
-                .then().extract().response();
+                .when()
+                .delete(BEERS_PATH + "/" + BeerManager.getTestId())
+                .then()
+                .statusCode(204)
+                .extract().response();
 
-        assertThat(response.statusCode(), equalTo(404));
+        given().contentType("application/json").when().get(BEERS_PATH + "/" + BeerManager.getTestId()).then().statusCode(404);
+
         log.info("ORDEM 9: Sucesso - Status: {}", response.statusCode());
     }
 
     @Test
     @Order(10)
-    void whenGETListWithoutBeersIsCalledThenOkStatusIsReturned() {
-        // Para garantir que a lista esteja vazia, precisamos deletar todas as cervejas.
-        // Este teste é mais complexo em um ambiente real. Por simplicidade, vamos assumir
-        // que após o teste 8, a lista pode estar vazia ou conter outras cervejas.
-        // Uma abordagem melhor seria limpar o banco antes deste teste.
-        // Por agora, vamos apenas chamar e verificar o status.
+    void listWithoutBeersIsCalled() {
         log.info("ORDEM 10: Testando a listagem de cervejas (pode não estar vazia).");
-        response = given()
+        response =given()
                 .contentType("application/json")
                 .when().get(BEERS_PATH)
                 .then().extract().response();
